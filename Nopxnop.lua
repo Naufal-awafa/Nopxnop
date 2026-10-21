@@ -6,17 +6,17 @@
 /_/ |_/\____/ .___/_/|_/ .___/\____/ .___/ .___/\__,_/  
            /_/        /_/         /_/   /_/             
     
-    [ Nopxnop v2.1 ] - Fully Undetected & Lightweight Script for Fish It!
-    Features: Venyx Modern UI + Floating Draggable Pop-Up Toggle + Full BAC Bypass
+    [ Nopxnop v3.0 ] - Undetected, Lightweight Script for Fish It!
+    Features: Venyx Modern UI + Floating Pop-up Toggle + Anti-Kick Engine
     Repository: https://github.com/Naufal-awafa/Nopxnop
 --]]
 
--- Wait until game engine is ready
+-- Ensure game is fully loaded
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
--- Prevent duplicate instances & cleanup previous
+-- Prevent duplicate script execution
 if getgenv().NopxnopLoaded then
     pcall(function()
         if getgenv().NopxnopCleanup then
@@ -39,93 +39,39 @@ local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Mouse = LocalPlayer:GetMouse()
 
 -- ==============================================================================
--- 1. HARDENED BAC ANTI-CHEAT & KICK SUPPRESSION
+-- 1. ERROR & DISCONNECT SUPPRESSION (Prevents Error Code 267)
 -- ==============================================================================
-local function installAntiCheatBypass()
-    -- Suppress GuiService Disconnect / Error Modal Dialog (Error Code 267)
-    pcall(function()
-        GuiService.ErrorMessageChanged:Connect(function()
-            pcall(function()
-                GuiService:ClearError()
-            end)
+pcall(function()
+    GuiService.ErrorMessageChanged:Connect(function()
+        pcall(function()
+            GuiService:ClearError()
         end)
     end)
+end)
 
-    -- Hook metamethod __namecall for Kick and Telemetry
-    pcall(function()
-        if hookmetamethod then
-            local oldNamecall
-            oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-                local method = getnamecallmethod()
-                local methodStr = tostring(method):lower()
-                local args = {...}
-
-                -- Suppress Kick attempts on LocalPlayer
-                if methodStr == "kick" and (self == LocalPlayer or tostring(self) == tostring(LocalPlayer)) then
-                    warn("[Nopxnop Security] Blocked Kick attempt: " .. tostring(args[1] or "Unknown"))
-                    return nil
-                end
-
-                -- Block BAC detection / telemetry / ban remotes
-                if methodStr == "fireserver" or methodStr == "invokeserver" then
-                    local sName = tostring(self.Name):lower()
-                    if sName:find("bac") or sName:find("ban") or sName:find("report") or sName:find("anticheat") or sName:find("security") or sName:find("detection") or sName:find("log") then
-                        return nil
-                    end
-                end
-
-                return oldNamecall(self, ...)
-            end))
-        end
-    end)
-
-    -- Hook direct LocalPlayer:Kick()
-    pcall(function()
-        if hookfunction and LocalPlayer.Kick then
-            hookfunction(LocalPlayer.Kick, newcclosure(function(self, ...)
-                warn("[Nopxnop Security] Suppressed direct Kick() call.")
-                return nil
-            end))
-        end
-    end)
-
-    -- Property index spoofing for anticheat property checks
-    pcall(function()
-        if hookmetamethod and checkcaller then
-            local oldIndex
-            oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-                if not checkcaller() and typeof(self) == "Instance" and self:IsA("Humanoid") and self.Parent == LocalPlayer.Character then
-                    if key == "WalkSpeed" then
-                        return 16
-                    elseif key == "JumpPower" then
-                        return 50
-                    end
-                end
-                return oldIndex(self, key)
-            end))
-        end
-    end)
-end
-
-installAntiCheatBypass()
+-- Safe function hook on Kick without touching DataModel metamethods
+pcall(function()
+    if hookfunction and LocalPlayer.Kick then
+        hookfunction(LocalPlayer.Kick, function(...)
+            return nil
+        end)
+    end
+end)
 
 -- ==============================================================================
 -- 2. CONFIGURATION & STATE
 -- ==============================================================================
 local Config = {
     AutoCast = false,
-    CastDelay = 1.2,
+    CastDelay = 1.5,
     AutoShake = false,
     AutoReel = false,
     AutoEquipRod = true,
     AutoSell = false,
     SellDelay = 60,
-    SpeedMultiplier = 1,
-    WalkSpeed = 16,
-    JumpPower = 50,
+    SpeedBoost = 1,
     InfJump = false,
     InfOxygen = false,
     Noclip = false,
@@ -152,12 +98,12 @@ end
 
 local function getHumanoid()
     local char = getCharacter()
-    return char:FindFirstChildOfClass("Humanoid")
+    return char and char:FindFirstChildOfClass("Humanoid")
 end
 
 local function getRootPart()
     local char = getCharacter()
-    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
 end
 
 -- Find Fishing Rod Tool
@@ -212,7 +158,7 @@ local function performCast()
     end
     if not rod or not rod.Parent or rod.Parent ~= LocalPlayer.Character then return end
 
-    -- Safe, natural tool activation
+    -- Safe natural activation (Never spams blind network remotes)
     pcall(function()
         rod:Activate()
     end)
@@ -224,20 +170,20 @@ local function performCast()
 end
 
 -- ==============================================================================
--- 3. STEALTH GUI SYSTEM WITH FLOATING POP-UP WIDGET
+-- 3. STEALTH GUI SYSTEM (HIGH PRIORITY DISPLAY & FLOATING POP-UP)
 -- ==============================================================================
 
 local function createProtectedGui()
     local gui = Instance.new("ScreenGui")
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    -- Stealth Random Disguise Name
-    gui.Name = "RobloxUI_" .. tostring(math.random(100000, 999999))
+    gui.DisplayOrder = 999999
+    gui.IgnoreGuiInset = true
+    gui.Name = "Nopxnop_UI_" .. tostring(math.random(10000, 99999))
 
     local attached = false
 
-    -- 1. gethui() (Executor isolated container)
+    -- 1. gethui() (Safest executor hidden container)
     if not attached and gethui then
         pcall(function()
             gui.Parent = gethui()
@@ -245,16 +191,7 @@ local function createProtectedGui()
         end)
     end
 
-    -- 2. syn.protect_gui on ScreenGui
-    if not attached and syn and syn.protect_gui then
-        pcall(function()
-            syn.protect_gui(gui)
-            gui.Parent = CoreGui
-            attached = true
-        end)
-    end
-
-    -- 3. CoreGui directly
+    -- 2. CoreGui directly
     if not attached and CoreGui then
         pcall(function()
             gui.Parent = CoreGui
@@ -262,9 +199,8 @@ local function createProtectedGui()
         end)
     end
 
-    -- 4. Fallback: PlayerGui with stealth disguise
+    -- 3. Fallback: PlayerGui
     if not attached then
-        gui.Name = "TouchGui" -- Disguised as mobile touch controller
         gui.Parent = PlayerGui
     end
 
@@ -273,70 +209,29 @@ end
 
 local ScreenGui = createProtectedGui()
 
--- Venyx UI Theme Palette
+-- Theme Palette (Venyx Sleek Dark)
 local Theme = {
     Background = Color3.fromRGB(18, 18, 24),
     Sidebar = Color3.fromRGB(13, 13, 18),
     Accent = Color3.fromRGB(0, 162, 255),
     AccentDark = Color3.fromRGB(0, 120, 200),
-    Card = Color3.fromRGB(24, 24, 32),
+    Card = Color3.fromRGB(25, 25, 34),
     Text = Color3.fromRGB(245, 245, 252),
     SubText = Color3.fromRGB(145, 145, 160),
-    ToggleOff = Color3.fromRGB(40, 40, 52),
-    Border = Color3.fromRGB(32, 32, 44)
+    ToggleOff = Color3.fromRGB(42, 42, 54),
+    Border = Color3.fromRGB(34, 34, 46)
 }
 
--- Drag Support (Mouse & Touch Friendly)
-local function makeDraggable(frame, dragHandle)
-    dragHandle = dragHandle or frame
-    local dragging = false
-    local dragInput = nil
-    local dragStart = nil
-    local startPos = nil
-
-    dragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    dragHandle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-end
-
 -- ------------------------------------------------------------------------------
--- A. FLOATING MINI POP-UP TOGGLE WIDGET
+-- A. FLOATING MINI POP-UP TOGGLE BUTTON
 -- ------------------------------------------------------------------------------
 local FloatWidget = Instance.new("Frame")
-FloatWidget.Name = "Nopxnop_FloatWidget"
+FloatWidget.Name = "FloatWidget"
 FloatWidget.Size = UDim2.new(0, 56, 0, 56)
-FloatWidget.Position = UDim2.new(0, 20, 0, 180)
+FloatWidget.Position = UDim2.new(0, 24, 0, 160)
 FloatWidget.BackgroundColor3 = Theme.Sidebar
 FloatWidget.BorderSizePixel = 0
-FloatWidget.ClipsDescendants = false
+FloatWidget.ZIndex = 100
 FloatWidget.Parent = ScreenGui
 
 local FloatCorner = Instance.new("UICorner")
@@ -345,7 +240,7 @@ FloatCorner.Parent = FloatWidget
 
 local FloatStroke = Instance.new("UIStroke")
 FloatStroke.Color = Theme.Accent
-FloatStroke.Thickness = 2
+FloatStroke.Thickness = 2.5
 FloatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 FloatStroke.Parent = FloatWidget
 
@@ -356,30 +251,32 @@ FloatIcon.Text = "🎣"
 FloatIcon.TextSize = 26
 FloatIcon.Font = Enum.Font.GothamBold
 FloatIcon.TextColor3 = Theme.Text
+FloatIcon.ZIndex = 101
 FloatIcon.Parent = FloatWidget
 
 local FloatPill = Instance.new("TextLabel")
-FloatPill.Size = UDim2.new(0, 40, 0, 14)
-FloatPill.Position = UDim2.new(0.5, -20, 1, -8)
+FloatPill.Size = UDim2.new(0, 42, 0, 14)
+FloatPill.Position = UDim2.new(0.5, -21, 1, -8)
 FloatPill.BackgroundColor3 = Theme.Accent
 FloatPill.Text = "NOP"
 FloatPill.TextColor3 = Color3.fromRGB(255, 255, 255)
 FloatPill.Font = Enum.Font.GothamBlack
 FloatPill.TextSize = 9
 FloatPill.BorderSizePixel = 0
+FloatPill.ZIndex = 102
 FloatPill.Parent = FloatWidget
 
 local FloatPillCorner = Instance.new("UICorner")
 FloatPillCorner.CornerRadius = UDim.new(0, 7)
 FloatPillCorner.Parent = FloatPill
 
-local FloatButton = Instance.new("TextButton")
-FloatButton.Size = UDim2.new(1, 0, 1, 0)
-FloatButton.BackgroundTransparency = 1
-FloatButton.Text = ""
-FloatButton.Parent = FloatWidget
-
-makeDraggable(FloatWidget, FloatButton)
+local FloatBtn = Instance.new("TextButton")
+FloatBtn.Size = UDim2.new(1, 0, 1, 0)
+FloatBtn.BackgroundTransparency = 1
+FloatBtn.Text = ""
+FloatBtn.ZIndex = 105
+FloatBtn.Active = true
+FloatBtn.Parent = FloatWidget
 
 -- ------------------------------------------------------------------------------
 -- B. MAIN VENYX MENU CONTAINER
@@ -387,10 +284,13 @@ makeDraggable(FloatWidget, FloatButton)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 560, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -280, 0.5, -180)
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Theme.Background
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
+MainFrame.Visible = true
+MainFrame.ZIndex = 10
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -408,6 +308,7 @@ Header.Name = "Header"
 Header.Size = UDim2.new(1, 0, 0, 42)
 Header.BackgroundColor3 = Theme.Sidebar
 Header.BorderSizePixel = 0
+Header.ZIndex = 11
 Header.Parent = MainFrame
 
 local HeaderCorner = Instance.new("UICorner")
@@ -419,23 +320,23 @@ HeaderCover.Size = UDim2.new(1, 0, 0, 10)
 HeaderCover.Position = UDim2.new(0, 0, 1, -10)
 HeaderCover.BackgroundColor3 = Theme.Sidebar
 HeaderCover.BorderSizePixel = 0
+HeaderCover.ZIndex = 11
 HeaderCover.Parent = Header
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(0, 260, 1, 0)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Nopxnop <font color=\"#00a2ff\">Fish It!</font> <font color=\"#777788\">v2.1</font>"
+Title.Text = "Nopxnop <font color=\"#00a2ff\">Fish It!</font> <font color=\"#777788\">v3.0</font>"
 Title.RichText = true
 Title.TextColor3 = Theme.Text
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 15
 Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 12
 Title.Parent = Header
 
-makeDraggable(MainFrame, Header)
-
--- Minimize Button (Collapses to Floating Pop-Up)
+-- Minimize Button (Shrinks Main Menu into Floating Pop-Up)
 local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Size = UDim2.new(0, 32, 0, 32)
 MinimizeBtn.Position = UDim2.new(1, -74, 0, 5)
@@ -445,6 +346,7 @@ MinimizeBtn.TextColor3 = Theme.SubText
 MinimizeBtn.Font = Enum.Font.GothamBold
 MinimizeBtn.TextSize = 14
 MinimizeBtn.AutoButtonColor = false
+MinimizeBtn.ZIndex = 13
 MinimizeBtn.Parent = Header
 
 local MinCorner = Instance.new("UICorner")
@@ -461,6 +363,7 @@ CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 13
 CloseBtn.AutoButtonColor = false
+CloseBtn.ZIndex = 13
 CloseBtn.Parent = Header
 
 local CloseCorner = Instance.new("UICorner")
@@ -484,6 +387,7 @@ local function toggleMenu(forceState)
             BackgroundTransparency = 0
         }):Play()
         FloatStroke.Color = Theme.Accent
+        FloatWidget.BackgroundTransparency = 0.2
     else
         local tw = TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
             Size = UDim2.new(0, 560, 0, 0),
@@ -496,6 +400,7 @@ local function toggleMenu(forceState)
             end
         end)
         FloatStroke.Color = Theme.Border
+        FloatWidget.BackgroundTransparency = 0
     end
 end
 
@@ -507,8 +412,74 @@ CloseBtn.MouseButton1Click:Connect(function()
     toggleMenu(false)
 end)
 
-FloatButton.MouseButton1Click:Connect(function()
-    toggleMenu()
+-- Drag vs Tap handler for Floating Button
+local isDragging = false
+local dragStartPos = nil
+local frameStartPos = nil
+local hasMoved = false
+
+FloatBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true
+        hasMoved = false
+        dragStartPos = input.Position
+        frameStartPos = FloatWidget.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isDragging = false
+                if not hasMoved then
+                    toggleMenu()
+                end
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStartPos
+        if delta.Magnitude > 5 then
+            hasMoved = true
+            FloatWidget.Position = UDim2.new(
+                frameStartPos.X.Scale,
+                frameStartPos.X.Offset + delta.X,
+                frameStartPos.Y.Scale,
+                frameStartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+-- Make Main Window draggable by Header
+local isWinDragging = false
+local winDragStart = nil
+local winStartPos = nil
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isWinDragging = true
+        winDragStart = input.Position
+        winStartPos = MainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isWinDragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isWinDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - winDragStart
+        MainFrame.Position = UDim2.new(
+            winStartPos.X.Scale,
+            winStartPos.X.Offset + delta.X,
+            winStartPos.Y.Scale,
+            winStartPos.Y.Offset + delta.Y
+        )
+    end
 end)
 
 -- Sidebar for Venyx Tabs
@@ -518,6 +489,7 @@ Sidebar.Size = UDim2.new(0, 130, 1, -42)
 Sidebar.Position = UDim2.new(0, 0, 0, 42)
 Sidebar.BackgroundColor3 = Theme.Sidebar
 Sidebar.BorderSizePixel = 0
+Sidebar.ZIndex = 11
 Sidebar.Parent = MainFrame
 
 local SidebarLayout = Instance.new("UIListLayout")
@@ -540,6 +512,7 @@ Content.Size = UDim2.new(1, -136, 1, -48)
 Content.Position = UDim2.new(0, 133, 0, 45)
 Content.BackgroundTransparency = 1
 Content.ClipsDescendants = true
+Content.ZIndex = 11
 Content.Parent = MainFrame
 
 -- Tab System Builder
@@ -557,6 +530,7 @@ local function addTab(tabName, icon)
     Page.ScrollBarImageColor3 = Theme.Accent
     Page.CanvasSize = UDim2.new(0, 0, 0, 0)
     Page.Visible = false
+    Page.ZIndex = 12
     Page.Parent = Content
 
     local Layout = Instance.new("UIListLayout")
@@ -584,6 +558,7 @@ local function addTab(tabName, icon)
     TabBtn.TextSize = 13
     TabBtn.TextXAlignment = Enum.TextXAlignment.Left
     TabBtn.AutoButtonColor = false
+    TabBtn.ZIndex = 12
     TabBtn.Parent = Sidebar
 
     local TabBtnCorner = Instance.new("UICorner")
@@ -621,6 +596,7 @@ local function addTab(tabName, icon)
         SecFrame.Size = UDim2.new(1, 0, 0, 24)
         SecFrame.BackgroundColor3 = Theme.Card
         SecFrame.BorderSizePixel = 0
+        SecFrame.ZIndex = 13
         SecFrame.Parent = Page
 
         local SC = Instance.new("UICorner")
@@ -636,6 +612,7 @@ local function addTab(tabName, icon)
         ST.Font = Enum.Font.GothamBold
         ST.TextSize = 11
         ST.TextXAlignment = Enum.TextXAlignment.Left
+        ST.ZIndex = 14
         ST.Parent = SecFrame
 
         local secMethods = {}
@@ -645,6 +622,7 @@ local function addTab(tabName, icon)
             Frame.Size = UDim2.new(1, 0, 0, 36)
             Frame.BackgroundColor3 = Theme.Card
             Frame.BorderSizePixel = 0
+            Frame.ZIndex = 13
             Frame.Parent = Page
 
             local FC = Instance.new("UICorner")
@@ -660,6 +638,7 @@ local function addTab(tabName, icon)
             Label.Font = Enum.Font.Gotham
             Label.TextSize = 13
             Label.TextXAlignment = Enum.TextXAlignment.Left
+            Label.ZIndex = 14
             Label.Parent = Frame
 
             local Switch = Instance.new("TextButton")
@@ -668,6 +647,7 @@ local function addTab(tabName, icon)
             Switch.BackgroundColor3 = default and Theme.Accent or Theme.ToggleOff
             Switch.Text = ""
             Switch.AutoButtonColor = false
+            Switch.ZIndex = 14
             Switch.Parent = Frame
 
             local SwitchCorner = Instance.new("UICorner")
@@ -679,6 +659,7 @@ local function addTab(tabName, icon)
             Circle.Position = default and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
             Circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Circle.BorderSizePixel = 0
+            Circle.ZIndex = 15
             Circle.Parent = Switch
 
             local CC = Instance.new("UICorner")
@@ -706,6 +687,7 @@ local function addTab(tabName, icon)
             SFrame.Size = UDim2.new(1, 0, 0, 48)
             SFrame.BackgroundColor3 = Theme.Card
             SFrame.BorderSizePixel = 0
+            SFrame.ZIndex = 13
             SFrame.Parent = Page
 
             local SC = Instance.new("UICorner")
@@ -721,6 +703,7 @@ local function addTab(tabName, icon)
             SLabel.Font = Enum.Font.Gotham
             SLabel.TextSize = 13
             SLabel.TextXAlignment = Enum.TextXAlignment.Left
+            SLabel.ZIndex = 14
             SLabel.Parent = SFrame
 
             local SVal = Instance.new("TextLabel")
@@ -732,6 +715,7 @@ local function addTab(tabName, icon)
             SVal.Font = Enum.Font.GothamBold
             SVal.TextSize = 13
             SVal.TextXAlignment = Enum.TextXAlignment.Right
+            SVal.ZIndex = 14
             SVal.Parent = SFrame
 
             local Track = Instance.new("TextButton")
@@ -740,6 +724,7 @@ local function addTab(tabName, icon)
             Track.BackgroundColor3 = Theme.ToggleOff
             Track.Text = ""
             Track.AutoButtonColor = false
+            Track.ZIndex = 14
             Track.Parent = SFrame
 
             local TC = Instance.new("UICorner")
@@ -751,6 +736,7 @@ local function addTab(tabName, icon)
             Fill.Size = UDim2.new(initPct, 0, 1, 0)
             Fill.BackgroundColor3 = Theme.Accent
             Fill.BorderSizePixel = 0
+            Fill.ZIndex = 15
             Fill.Parent = Track
 
             local FC = Instance.new("UICorner")
@@ -792,6 +778,7 @@ local function addTab(tabName, icon)
             BFrame.Size = UDim2.new(1, 0, 0, 36)
             BFrame.BackgroundColor3 = Theme.Card
             BFrame.BorderSizePixel = 0
+            BFrame.ZIndex = 13
             BFrame.Parent = Page
 
             local BC = Instance.new("UICorner")
@@ -807,6 +794,7 @@ local function addTab(tabName, icon)
             ActionBtn.Font = Enum.Font.GothamMedium
             ActionBtn.TextSize = 13
             ActionBtn.AutoButtonColor = false
+            ActionBtn.ZIndex = 14
             ActionBtn.Parent = BFrame
 
             local AC = Instance.new("UICorner")
@@ -853,7 +841,7 @@ SecFish:addToggle("Auto Cast Rod", Config.AutoCast, function(state)
     end
 end)
 
-SecFish:addSlider("Cast Delay (ms)", math.floor(Config.CastDelay * 1000), 500, 3500, function(value)
+SecFish:addSlider("Cast Delay (ms)", math.floor(Config.CastDelay * 1000), 800, 3500, function(value)
     Config.CastDelay = value / 1000
 end)
 
@@ -885,7 +873,7 @@ SecFish:addToggle("Auto Shake (Minigame)", Config.AutoShake, function(state)
                         end
                     end
                 end)
-                task.wait(0.08)
+                task.wait(0.12)
             end
         end)
     end
@@ -897,13 +885,13 @@ SecFish:addToggle("Auto Reel (Natural CPS)", Config.AutoReel, function(state)
         task.spawn(function()
             while Config.AutoReel do
                 pcall(function()
-                    -- Natural human-like reeling rate (9 clicks/sec)
+                    -- Natural human-like reeling rate (8-9 clicks/sec)
                     local mousePos = UserInputService:GetMouseLocation()
                     VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, 0, true, game, 1)
                     task.wait(0.05)
                     VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, 0, false, game, 1)
                 end)
-                task.wait(0.06)
+                task.wait(0.08)
             end
         end)
     end
@@ -947,7 +935,7 @@ SecEco:addToggle("Auto Sell (Loop)", Config.AutoSell, function(state)
     end
 end)
 
-SecEco:addSlider("Auto Sell Interval (s)", Config.SellDelay, 15, 180, function(value)
+SecEco:addSlider("Auto Sell Interval (s)", Config.SellDelay, 20, 180, function(value)
     Config.SellDelay = value
 end)
 
@@ -1017,17 +1005,16 @@ end)
 -- ==============================================================================
 local SecMove = PagePlayer:addSection("Stealth Movement")
 
--- Never touches Humanoid.WalkSpeed directly to avoid BAC Property listeners!
-SecMove:addSlider("Movement Boost", 1, 1, 5, function(value)
-    Config.SpeedMultiplier = value
+SecMove:addSlider("Speed Boost", 1, 1, 4, function(value)
+    Config.SpeedBoost = value
 end)
 
 Connections.StealthSpeed = RunService.RenderStepped:Connect(function()
-    if Config.SpeedMultiplier > 1 then
+    if Config.SpeedBoost > 1 then
         local hum = getHumanoid()
         local root = getRootPart()
         if hum and root and hum.MoveDirection.Magnitude > 0 then
-            local boostFactor = (Config.SpeedMultiplier - 1) * 0.28
+            local boostFactor = (Config.SpeedBoost - 1) * 0.25
             root.CFrame = root.CFrame + (hum.MoveDirection * boostFactor)
         end
     end
@@ -1156,9 +1143,9 @@ end)
 
 print([[
 ======================================================
-   [Nopxnop v2.1] Loaded & Running!
-   - Anti-Cheat & BAC Bypass: Active
-   - Venyx UI + Floating Pop-up Toggle: Active
-   - Tap the Floating 🎣 Button or press RightShift
+   [Nopxnop v3.0] Running & Undetected!
+   - Floating Pop-up Widget: Active
+   - Venyx Menu: Centered & High Priority
+   - Tap 🎣 or press RightShift to Toggle
 ======================================================
 ]])
