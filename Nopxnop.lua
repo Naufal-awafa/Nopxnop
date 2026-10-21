@@ -6,14 +6,15 @@
 /_/ |_/\____/ .___/_/|_/ .___/\____/ .___/ .___/\__,_/  
            /_/        /_/         /_/   /_/             
     
-    [ Nopxnop v3.0 ] - Undetected, Lightweight Script for Fish It!
-    Features: Venyx Modern UI + Floating Pop-up Toggle + Anti-Kick Engine
+    [ Nopxnop v4.0 - Lynx Edition ]
+    Full Lynx Clone for Fish It! (Roblox)
+    Features: Venyx UI + Floating Pop-up + Blatant Perfect Cast + Instant Catch
     Repository: https://github.com/Naufal-awafa/Nopxnop
 --]]
 
--- Ensure game is fully loaded
+-- Ensure game is loaded safely
 if not game:IsLoaded() then
-    game.Loaded:Wait()
+    pcall(function() game.Loaded:Wait() end)
 end
 
 -- Prevent duplicate script execution
@@ -26,7 +27,7 @@ if getgenv().NopxnopLoaded then
 end
 getgenv().NopxnopLoaded = true
 
--- Services
+-- Core Roblox Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -37,11 +38,12 @@ local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
 local GuiService = game:GetService("GuiService")
 
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10) or LocalPlayer:FindFirstChildOfClass("PlayerGui")
+local Camera = workspace.CurrentCamera
 
 -- ==============================================================================
--- 1. ERROR & DISCONNECT SUPPRESSION (Prevents Error Code 267)
+-- 1. ERROR & DISCONNECT SUPPRESSION (Prevents Error Code 267 / BAC-9228)
 -- ==============================================================================
 pcall(function()
     GuiService.ErrorMessageChanged:Connect(function()
@@ -51,12 +53,51 @@ pcall(function()
     end)
 end)
 
--- Safe function hook on Kick without touching DataModel metamethods
 pcall(function()
     if hookfunction and LocalPlayer.Kick then
-        hookfunction(LocalPlayer.Kick, function(...)
-            return nil
-        end)
+        hookfunction(LocalPlayer.Kick, function(...) return nil end)
+    end
+end)
+
+-- Neutralize client BAC scripts in PlayerScripts and Character
+local function neutralizeBAC()
+    pcall(function()
+        local ps = LocalPlayer:FindFirstChild("PlayerScripts")
+        if ps then
+            for _, s in ipairs(ps:GetDescendants()) do
+                if s:IsA("LocalScript") then
+                    local name = s.Name:lower()
+                    if name:find("bac") or name:find("anticheat") or name:find("cheat") or name:find("security") or name:find("detection") then
+                        s.Disabled = true
+                    end
+                end
+            end
+        end
+        if LocalPlayer.Character then
+            for _, s in ipairs(LocalPlayer.Character:GetDescendants()) do
+                if s:IsA("LocalScript") then
+                    local name = s.Name:lower()
+                    if name:find("bac") or name:find("anticheat") or name:find("cheat") or name:find("security") or name:find("detection") then
+                        s.Disabled = true
+                    end
+                end
+            end
+        end
+    end)
+end
+
+neutralizeBAC()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    neutralizeBAC()
+end)
+
+-- Disable PlayerGui.ChildAdded listeners that scan for foreign ScreenGuis
+pcall(function()
+    if getconnections and PlayerGui then
+        for _, conn in ipairs(getconnections(PlayerGui.ChildAdded)) do
+            pcall(function() conn:Disable() end)
+        end
     end
 end)
 
@@ -64,13 +105,24 @@ end)
 -- 2. CONFIGURATION & STATE
 -- ==============================================================================
 local Config = {
+    -- Legit Fishing
     AutoCast = false,
     CastDelay = 1.5,
     AutoShake = false,
     AutoReel = false,
     AutoEquipRod = true,
+    
+    -- Blatant Fishing (Lynx Mode)
+    AutoPerfectCast = false,
+    InstantReel = false,
+    BlatantFastCatch = false,
+    FastCastDelay = 0.5,
+    
+    -- Economy & Farm
     AutoSell = false,
     SellDelay = 60,
+    
+    -- Movement & Player
     SpeedBoost = 1,
     InfJump = false,
     InfOxygen = false,
@@ -78,6 +130,8 @@ local Config = {
     AntiAFK = true,
     FullBright = false,
     SafePlatform = false,
+    
+    -- UI
     MenuVisible = true
 }
 
@@ -150,18 +204,14 @@ local function equipRod()
     return rod
 end
 
+-- Standard Cast
 local function performCast()
     local rod, isEquipped = findRod()
     if not rod then return end
-    if not isEquipped then
-        rod = equipRod()
-    end
+    if not isEquipped then rod = equipRod() end
     if not rod or not rod.Parent or rod.Parent ~= LocalPlayer.Character then return end
 
-    -- Safe natural activation (Never spams blind network remotes)
-    pcall(function()
-        rod:Activate()
-    end)
+    pcall(function() rod:Activate() end)
     pcall(function()
         VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
         task.wait(0.08)
@@ -169,8 +219,28 @@ local function performCast()
     end)
 end
 
+-- Blatant Perfect Cast (100% Charge Bar Simulation)
+local function performPerfectCast()
+    local rod, isEquipped = findRod()
+    if not rod then return end
+    if not isEquipped then rod = equipRod() end
+    if not rod or not rod.Parent or rod.Parent ~= LocalPlayer.Character then return end
+
+    pcall(function()
+        -- Hold click for optimal charge (reaches 100% perfect bar)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.48) -- Optimal perfect cast timing
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    end)
+    
+    -- Also activate rod directly
+    pcall(function()
+        rod:Activate()
+    end)
+end
+
 -- ==============================================================================
--- 3. STEALTH GUI SYSTEM (HIGH PRIORITY DISPLAY & FLOATING POP-UP)
+-- 3. STEALTH GUI SYSTEM (HIGH PRIORITY DISPLAY & FLOATING POP-UP WIDGET)
 -- ==============================================================================
 
 local function createProtectedGui()
@@ -183,7 +253,7 @@ local function createProtectedGui()
 
     local attached = false
 
-    -- 1. gethui() (Safest executor hidden container)
+    -- 1. gethui() (Executor isolated container)
     if not attached and gethui then
         pcall(function()
             gui.Parent = gethui()
@@ -199,8 +269,19 @@ local function createProtectedGui()
         end)
     end
 
-    -- 3. Fallback: PlayerGui
-    if not attached then
+    -- 3. Fallback: Host inside an existing whitelisted game ScreenGui if possible
+    if not attached and PlayerGui then
+        for _, existingGui in ipairs(PlayerGui:GetChildren()) do
+            if existingGui:IsA("ScreenGui") and existingGui.Enabled then
+                gui.Parent = existingGui
+                attached = true
+                break
+            end
+        end
+    end
+
+    -- 4. Direct PlayerGui fallback
+    if not attached and PlayerGui then
         gui.Parent = PlayerGui
     end
 
@@ -214,7 +295,7 @@ local Theme = {
     Background = Color3.fromRGB(18, 18, 24),
     Sidebar = Color3.fromRGB(13, 13, 18),
     Accent = Color3.fromRGB(0, 162, 255),
-    AccentDark = Color3.fromRGB(0, 120, 200),
+    AccentBlatant = Color3.fromRGB(255, 60, 80),
     Card = Color3.fromRGB(25, 25, 34),
     Text = Color3.fromRGB(245, 245, 252),
     SubText = Color3.fromRGB(145, 145, 160),
@@ -223,12 +304,12 @@ local Theme = {
 }
 
 -- ------------------------------------------------------------------------------
--- A. FLOATING MINI POP-UP TOGGLE BUTTON
+-- A. FLOATING MINI POP-UP TOGGLE WIDGET (Always on screen & draggable)
 -- ------------------------------------------------------------------------------
 local FloatWidget = Instance.new("Frame")
 FloatWidget.Name = "FloatWidget"
 FloatWidget.Size = UDim2.new(0, 56, 0, 56)
-FloatWidget.Position = UDim2.new(0, 24, 0, 160)
+FloatWidget.Position = UDim2.new(0, 20, 0.4, 0)
 FloatWidget.BackgroundColor3 = Theme.Sidebar
 FloatWidget.BorderSizePixel = 0
 FloatWidget.ZIndex = 100
@@ -281,9 +362,13 @@ FloatBtn.Parent = FloatWidget
 -- ------------------------------------------------------------------------------
 -- B. MAIN VENYX MENU CONTAINER
 -- ------------------------------------------------------------------------------
+local viewport = Camera and Camera.ViewportSize or Vector2.new(800, 600)
+local winWidth = math.clamp(viewport.X - 30, 320, 560)
+local winHeight = math.clamp(viewport.Y - 50, 260, 360)
+
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 560, 0, 360)
+MainFrame.Size = UDim2.new(0, winWidth, 0, winHeight)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Theme.Background
@@ -324,14 +409,14 @@ HeaderCover.ZIndex = 11
 HeaderCover.Parent = Header
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0, 260, 1, 0)
+Title.Size = UDim2.new(0, 290, 1, 0)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Nopxnop <font color=\"#00a2ff\">Fish It!</font> <font color=\"#777788\">v3.0</font>"
+Title.Text = "Nopxnop <font color=\"#00a2ff\">Fish It!</font> <font color=\"#ff3c50\">[Lynx Edition]</font>"
 Title.RichText = true
 Title.TextColor3 = Theme.Text
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 15
+Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.ZIndex = 12
 Title.Parent = Header
@@ -380,17 +465,17 @@ local function toggleMenu(forceState)
 
     if Config.MenuVisible then
         MainFrame.Visible = true
-        MainFrame.Size = UDim2.new(0, 560, 0, 0)
+        MainFrame.Size = UDim2.new(0, winWidth, 0, 0)
         MainFrame.BackgroundTransparency = 1
         TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, 560, 0, 360),
+            Size = UDim2.new(0, winWidth, 0, winHeight),
             BackgroundTransparency = 0
         }):Play()
         FloatStroke.Color = Theme.Accent
         FloatWidget.BackgroundTransparency = 0.2
     else
         local tw = TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 560, 0, 0),
+            Size = UDim2.new(0, winWidth, 0, 0),
             BackgroundTransparency = 1
         })
         tw:Play()
@@ -520,14 +605,14 @@ local Tabs = {}
 local TabButtons = {}
 local activeTab = nil
 
-local function addTab(tabName, icon)
+local function addTab(tabName, icon, isSpecial)
     local Page = Instance.new("ScrollingFrame")
     Page.Name = tabName .. "Page"
     Page.Size = UDim2.new(1, 0, 1, 0)
     Page.BackgroundTransparency = 1
     Page.BorderSizePixel = 0
     Page.ScrollBarThickness = 4
-    Page.ScrollBarImageColor3 = Theme.Accent
+    Page.ScrollBarImageColor3 = isSpecial and Theme.AccentBlatant or Theme.Accent
     Page.CanvasSize = UDim2.new(0, 0, 0, 0)
     Page.Visible = false
     Page.ZIndex = 12
@@ -553,8 +638,8 @@ local function addTab(tabName, icon)
     TabBtn.Size = UDim2.new(1, 0, 0, 34)
     TabBtn.BackgroundColor3 = Theme.Sidebar
     TabBtn.Text = (icon or "•") .. "  " .. tabName
-    TabBtn.TextColor3 = Theme.SubText
-    TabBtn.Font = Enum.Font.GothamMedium
+    TabBtn.TextColor3 = isSpecial and Theme.AccentBlatant or Theme.SubText
+    TabBtn.Font = isSpecial and Enum.Font.GothamBold or Enum.Font.GothamMedium
     TabBtn.TextSize = 13
     TabBtn.TextXAlignment = Enum.TextXAlignment.Left
     TabBtn.AutoButtonColor = false
@@ -573,16 +658,17 @@ local function addTab(tabName, icon)
         for _, p in pairs(Tabs) do p.Visible = false end
         for _, b in pairs(TabButtons) do
             b.BackgroundColor3 = Theme.Sidebar
-            b.TextColor3 = Theme.SubText
+            b.TextColor3 = b:GetAttribute("Special") and Theme.AccentBlatant or Theme.SubText
             b.Font = Enum.Font.GothamMedium
         end
         Page.Visible = true
         TabBtn.BackgroundColor3 = Theme.Card
-        TabBtn.TextColor3 = Theme.Accent
+        TabBtn.TextColor3 = isSpecial and Theme.AccentBlatant or Theme.Accent
         TabBtn.Font = Enum.Font.GothamBold
         activeTab = tabName
     end
 
+    TabBtn:SetAttribute("Special", isSpecial or false)
     TabBtn.MouseButton1Click:Connect(selectTab)
     Tabs[tabName] = Page
     TabButtons[tabName] = TabBtn
@@ -591,7 +677,7 @@ local function addTab(tabName, icon)
 
     local tabMethods = {}
 
-    function tabMethods:addSection(title)
+    function tabMethods:addSection(title, isBlatantSec)
         local SecFrame = Instance.new("Frame")
         SecFrame.Size = UDim2.new(1, 0, 0, 24)
         SecFrame.BackgroundColor3 = Theme.Card
@@ -608,7 +694,7 @@ local function addTab(tabName, icon)
         ST.Position = UDim2.new(0, 10, 0, 0)
         ST.BackgroundTransparency = 1
         ST.Text = title:upper()
-        ST.TextColor3 = Theme.Accent
+        ST.TextColor3 = isBlatantSec and Theme.AccentBlatant or Theme.Accent
         ST.Font = Enum.Font.GothamBold
         ST.TextSize = 11
         ST.TextXAlignment = Enum.TextXAlignment.Left
@@ -617,7 +703,7 @@ local function addTab(tabName, icon)
 
         local secMethods = {}
 
-        function secMethods:addToggle(name, default, callback)
+        function secMethods:addToggle(name, default, callback, isBlatantToggle)
             local Frame = Instance.new("Frame")
             Frame.Size = UDim2.new(1, 0, 0, 36)
             Frame.BackgroundColor3 = Theme.Card
@@ -641,10 +727,12 @@ local function addTab(tabName, icon)
             Label.ZIndex = 14
             Label.Parent = Frame
 
+            local activeColor = isBlatantToggle and Theme.AccentBlatant or Theme.Accent
+
             local Switch = Instance.new("TextButton")
             Switch.Size = UDim2.new(0, 42, 0, 22)
             Switch.Position = UDim2.new(1, -52, 0.5, -11)
-            Switch.BackgroundColor3 = default and Theme.Accent or Theme.ToggleOff
+            Switch.BackgroundColor3 = default and activeColor or Theme.ToggleOff
             Switch.Text = ""
             Switch.AutoButtonColor = false
             Switch.ZIndex = 14
@@ -671,7 +759,7 @@ local function addTab(tabName, icon)
             local function setState(v)
                 state = v
                 local targetPos = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
-                local targetColor = state and Theme.Accent or Theme.ToggleOff
+                local targetColor = state and activeColor or Theme.ToggleOff
                 TweenService:Create(Circle, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {Position = targetPos}):Play()
                 TweenService:Create(Switch, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {BackgroundColor3 = targetColor}):Play()
                 if callback then pcall(callback, state) end
@@ -682,7 +770,7 @@ local function addTab(tabName, icon)
             end)
         end
 
-        function secMethods:addSlider(name, default, min, max, callback)
+        function secMethods:addSlider(name, default, min, max, callback, isBlatantSlider)
             local SFrame = Instance.new("Frame")
             SFrame.Size = UDim2.new(1, 0, 0, 48)
             SFrame.BackgroundColor3 = Theme.Card
@@ -693,6 +781,8 @@ local function addTab(tabName, icon)
             local SC = Instance.new("UICorner")
             SC.CornerRadius = UDim.new(0, 6)
             SC.Parent = SFrame
+
+            local activeColor = isBlatantSlider and Theme.AccentBlatant or Theme.Accent
 
             local SLabel = Instance.new("TextLabel")
             SLabel.Size = UDim2.new(1, -80, 0, 20)
@@ -711,7 +801,7 @@ local function addTab(tabName, icon)
             SVal.Position = UDim2.new(1, -70, 0, 6)
             SVal.BackgroundTransparency = 1
             SVal.Text = tostring(default)
-            SVal.TextColor3 = Theme.Accent
+            SVal.TextColor3 = activeColor
             SVal.Font = Enum.Font.GothamBold
             SVal.TextSize = 13
             SVal.TextXAlignment = Enum.TextXAlignment.Right
@@ -734,7 +824,7 @@ local function addTab(tabName, icon)
             local Fill = Instance.new("Frame")
             local initPct = math.clamp((default - min) / (max - min), 0, 1)
             Fill.Size = UDim2.new(initPct, 0, 1, 0)
-            Fill.BackgroundColor3 = Theme.Accent
+            Fill.BackgroundColor3 = activeColor
             Fill.BorderSizePixel = 0
             Fill.ZIndex = 15
             Fill.Parent = Track
@@ -773,7 +863,7 @@ local function addTab(tabName, icon)
             end)
         end
 
-        function secMethods:addButton(name, callback)
+        function secMethods:addButton(name, callback, isSpecialBtn)
             local BFrame = Instance.new("Frame")
             BFrame.Size = UDim2.new(1, 0, 0, 36)
             BFrame.BackgroundColor3 = Theme.Card
@@ -788,9 +878,9 @@ local function addTab(tabName, icon)
             local ActionBtn = Instance.new("TextButton")
             ActionBtn.Size = UDim2.new(1, -16, 1, -8)
             ActionBtn.Position = UDim2.new(0, 8, 0, 4)
-            ActionBtn.BackgroundColor3 = Theme.Sidebar
+            ActionBtn.BackgroundColor3 = isSpecialBtn and Theme.AccentBlatant or Theme.Sidebar
             ActionBtn.Text = name
-            ActionBtn.TextColor3 = Theme.Text
+            ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
             ActionBtn.Font = Enum.Font.GothamMedium
             ActionBtn.TextSize = 13
             ActionBtn.AutoButtonColor = false
@@ -802,9 +892,11 @@ local function addTab(tabName, icon)
             AC.Parent = ActionBtn
 
             ActionBtn.MouseButton1Click:Connect(function()
-                TweenService:Create(ActionBtn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.Accent}):Play()
+                local flashColor = isSpecialBtn and Theme.Accent or Theme.AccentBlatant
+                local baseColor = isSpecialBtn and Theme.AccentBlatant or Theme.Sidebar
+                TweenService:Create(ActionBtn, TweenInfo.new(0.1), {BackgroundColor3 = flashColor}):Play()
                 task.wait(0.1)
-                TweenService:Create(ActionBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Sidebar}):Play()
+                TweenService:Create(ActionBtn, TweenInfo.new(0.15), {BackgroundColor3 = baseColor}):Play()
                 if callback then pcall(callback) end
             end)
         end
@@ -815,25 +907,25 @@ local function addTab(tabName, icon)
     return tabMethods
 end
 
--- Create Pages
+-- Create Application Pages
 local PageFishing = addTab("Fishing", "🎣")
+local PageBlatant = addTab("Blatant", "⚡", true) -- Special Lynx Blatant Tab
+local PageFarm = addTab("Farm & Sell", "💰")
 local PageTeleport = addTab("Teleport", "🏝️")
 local PagePlayer = addTab("Player", "🏃")
 local PageSettings = addTab("Settings", "⚙️")
 
 -- ==============================================================================
--- 4. FISHING FEATURES
+-- 4. FISHING FEATURES (LEGIT TAB)
 -- ==============================================================================
-local SecFish = PageFishing:addSection("Automation")
+local SecFish = PageFishing:addSection("Legit Automation")
 
 SecFish:addToggle("Auto Cast Rod", Config.AutoCast, function(state)
     Config.AutoCast = state
     if state then
         task.spawn(function()
             while Config.AutoCast do
-                if Config.AutoEquipRod then
-                    equipRod()
-                end
+                if Config.AutoEquipRod then equipRod() end
                 performCast()
                 task.wait(Config.CastDelay)
             end
@@ -851,22 +943,24 @@ SecFish:addToggle("Auto Shake (Minigame)", Config.AutoShake, function(state)
         task.spawn(function()
             while Config.AutoShake do
                 pcall(function()
-                    for _, gui in ipairs(PlayerGui:GetChildren()) do
-                        if gui:IsA("ScreenGui") and gui.Enabled then
-                            local gName = gui.Name:lower()
-                            if gName:find("shake") or gName:find("fish") or gName:find("minigame") or gName:find("reel") or gName:find("bar") then
-                                for _, btn in ipairs(gui:GetDescendants()) do
-                                    if (btn:IsA("ImageButton") or btn:IsA("TextButton")) and btn.Visible and btn.Active then
-                                        pcall(function()
-                                            if getconnections then
-                                                for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
-                                                for _, conn in ipairs(getconnections(btn.Activated)) do conn:Fire() end
-                                            end
-                                        end)
-                                        local center = btn.AbsolutePosition + (btn.AbsoluteSize / 2)
-                                        VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
-                                        task.wait(0.02)
-                                        VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+                    if PlayerGui then
+                        for _, gui in ipairs(PlayerGui:GetChildren()) do
+                            if gui:IsA("ScreenGui") and gui.Enabled then
+                                local gName = gui.Name:lower()
+                                if gName:find("shake") or gName:find("fish") or gName:find("minigame") or gName:find("reel") or gName:find("bar") then
+                                    for _, btn in ipairs(gui:GetDescendants()) do
+                                        if (btn:IsA("ImageButton") or btn:IsA("TextButton")) and btn.Visible and btn.Active then
+                                            pcall(function()
+                                                if getconnections then
+                                                    for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
+                                                    for _, conn in ipairs(getconnections(btn.Activated)) do conn:Fire() end
+                                                end
+                                            end)
+                                            local center = btn.AbsolutePosition + (btn.AbsoluteSize / 2)
+                                            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
+                                            task.wait(0.02)
+                                            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+                                        end
                                     end
                                 end
                             end
@@ -885,7 +979,6 @@ SecFish:addToggle("Auto Reel (Natural CPS)", Config.AutoReel, function(state)
         task.spawn(function()
             while Config.AutoReel do
                 pcall(function()
-                    -- Natural human-like reeling rate (8-9 clicks/sec)
                     local mousePos = UserInputService:GetMouseLocation()
                     VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, 0, true, game, 1)
                     task.wait(0.05)
@@ -902,7 +995,84 @@ SecFish:addToggle("Auto Equip Rod", Config.AutoEquipRod, function(state)
     if state then equipRod() end
 end)
 
-local SecEco = PageFishing:addSection("Economy & Selling")
+-- ==============================================================================
+-- 5. BLATANT FISHING (LYNX CLONE FEATURES)
+-- ==============================================================================
+local SecBlatant = PageBlatant:addSection("Blatant Fishing Hacks", true)
+
+SecBlatant:addToggle("Auto Perfect Cast (100% Power)", Config.AutoPerfectCast, function(state)
+    Config.AutoPerfectCast = state
+    if state then
+        task.spawn(function()
+            while Config.AutoPerfectCast do
+                if Config.AutoEquipRod then equipRod() end
+                performPerfectCast()
+                task.wait(Config.FastCastDelay)
+            end
+        end)
+    end
+end, true)
+
+SecBlatant:addToggle("Instant Reel / Fast Catch", Config.InstantReel, function(state)
+    Config.InstantReel = state
+    if state then
+        task.spawn(function()
+            while Config.InstantReel do
+                pcall(function()
+                    -- Rapid blitz clicks to instantly deplete fish health bar
+                    for i = 1, 5 do
+                        local mousePos = UserInputService:GetMouseLocation()
+                        VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, 0, true, game, 1)
+                        task.wait(0.01)
+                        VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, 0, false, game, 1)
+                    end
+                end)
+                task.wait(0.03)
+            end
+        end)
+    end
+end, true)
+
+SecBlatant:addToggle("Blatant Auto Fish Loop", Config.BlatantFastCatch, function(state)
+    Config.BlatantFastCatch = state
+    if state then
+        task.spawn(function()
+            while Config.BlatantFastCatch do
+                equipRod()
+                performPerfectCast()
+                task.wait(0.6)
+                -- Blitz shake buttons
+                pcall(function()
+                    if PlayerGui then
+                        for _, gui in ipairs(PlayerGui:GetChildren()) do
+                            if gui:IsA("ScreenGui") and gui.Enabled then
+                                for _, btn in ipairs(gui:GetDescendants()) do
+                                    if (btn:IsA("ImageButton") or btn:IsA("TextButton")) and btn.Visible then
+                                        pcall(function()
+                                            if getconnections then
+                                                for _, c in ipairs(getconnections(btn.Activated)) do c:Fire() end
+                                            end
+                                        end)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+                task.wait(Config.FastCastDelay)
+            end
+        end)
+    end
+end, true)
+
+SecBlatant:addSlider("Blatant Cast Cooldown (ms)", math.floor(Config.FastCastDelay * 1000), 200, 2000, function(value)
+    Config.FastCastDelay = value / 1000
+end, true)
+
+-- ==============================================================================
+-- 6. FARM & ECONOMY
+-- ==============================================================================
+local SecEco = PageFarm:addSection("Merchant & Selling")
 
 local function sellFishSafely()
     pcall(function()
@@ -918,7 +1088,7 @@ local function sellFishSafely()
     end)
 end
 
-SecEco:addButton("Sell All Fish (Merchant)", function()
+SecEco:addButton("Sell All Fish Now (Merchant)", function()
     sellFishSafely()
 end)
 
@@ -935,12 +1105,12 @@ SecEco:addToggle("Auto Sell (Loop)", Config.AutoSell, function(state)
     end
 end)
 
-SecEco:addSlider("Auto Sell Interval (s)", Config.SellDelay, 20, 180, function(value)
+SecEco:addSlider("Auto Sell Interval (s)", Config.SellDelay, 15, 180, function(value)
     Config.SellDelay = value
 end)
 
 -- ==============================================================================
--- 5. TELEPORTS
+-- 7. TELEPORTS
 -- ==============================================================================
 local SecTP = PageTeleport:addSection("Islands & Zones")
 
@@ -1001,7 +1171,7 @@ SecSky:addToggle("Safe Sky Fishing Platform", Config.SafePlatform, function(stat
 end)
 
 -- ==============================================================================
--- 6. PLAYER & MOVEMENT (STEALTH VELOCITY TRANSLATION)
+-- 8. PLAYER & MOVEMENT
 -- ==============================================================================
 local SecMove = PagePlayer:addSection("Stealth Movement")
 
@@ -1084,8 +1254,16 @@ Connections.AntiAFK = LocalPlayer.Idled:Connect(function()
 end)
 
 -- ==============================================================================
--- 7. SETTINGS & VISUALS
+-- 9. SETTINGS & OFFICIAL LYNX INTEGRATION
 -- ==============================================================================
+local SecLynx = PageSettings:addSection("Official Lynx Integration")
+
+SecLynx:addButton("⚡ Launch Official Lynx Engine Directly", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/4LynxX/all_Game/refs/heads/main/Fish_It.lua"))()
+    end)
+end, true)
+
 local SecVis = PageSettings:addSection("Visuals")
 
 SecVis:addToggle("FullBright", Config.FullBright, function(state)
@@ -1143,8 +1321,8 @@ end)
 
 print([[
 ======================================================
-   [Nopxnop v3.0] Running & Undetected!
-   - Floating Pop-up Widget: Active
+   [Nopxnop v4.0 - Lynx Edition] Running!
+   - Blatant Perfect Cast: Active
    - Venyx Menu: Centered & High Priority
    - Tap 🎣 or press RightShift to Toggle
 ======================================================
